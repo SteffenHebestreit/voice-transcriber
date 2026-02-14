@@ -109,15 +109,39 @@ volumes:
   }
 
   /**
+   * Stop any container using port 8000
+   */
+  private async freePort(): Promise<void> {
+    try {
+      // Find any container using port 8000
+      const { stdout } = await execAsync(
+        'docker ps --format "{{.ID}}" --filter "publish=8000"'
+      );
+      const containerIds = stdout.trim().split('\n').filter(Boolean);
+      for (const id of containerIds) {
+        await execAsync(`docker stop ${id}`).catch(() => {});
+        await execAsync(`docker rm ${id}`).catch(() => {});
+      }
+    } catch {
+      // No containers found or docker not available
+    }
+  }
+
+  /**
    * Rebuild and restart the Docker container
    */
   private async rebuildAndRestart(): Promise<void> {
-    // Stop existing container
+    // Stop our own project's container first
     try {
-      await execAsync(`cd "${this.serverPath}" && docker-compose down`);
+      await execAsync(`cd "${this.serverPath}" && docker-compose down`, {
+        timeout: 15000
+      });
     } catch {
       // Container may not be running, that's fine
     }
+
+    // Also stop any other container holding port 8000 (e.g. from a different project name)
+    await this.freePort();
 
     // Rebuild with new Dockerfile and start
     await execAsync(`cd "${this.serverPath}" && docker-compose up -d --build`, {
