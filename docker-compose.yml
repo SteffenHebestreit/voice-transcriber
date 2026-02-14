@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  whisper-server:
+    build: .
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    # Model options: tiny, base, small, medium, large-v2, large-v3
+    # Device: cpu (works everywhere) or cuda (requires NVIDIA GPU + nvidia-docker)
+    # Compute type: int8 (CPU optimized), float16 (GPU optimized), float32 (highest precision)
+    command: python whisper-server.py --host 0.0.0.0 --port 8000 --model small --device cpu --compute-type int8
+    volumes:
+      # Cache models to avoid re-downloading
+      - whisper-models:/root/.cache/huggingface
+    # Uncomment the deploy section below when using GPU (--device cuda)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+volumes:
+  whisper-models:
