@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'">
+  <title>Voice Transcriber Settings</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Voice Transcriber Settings</h1>
+      <p class="subtitle">Configure your voice-to-text transcription tool</p>
+    </header>
+
+    <main id="settings-container">
+      <section class="settings-section">
+        <h2>Whisper Configuration</h2>
+        <div class="form-group">
+          <label for="whisper-endpoint">Endpoint URL</label>
+          <input type="text" id="whisper-endpoint" placeholder="http://localhost:8000/v1/audio/transcriptions">
+          <small>URL of your Whisper API endpoint</small>
+        </div>
+
+        <div class="form-group">
+          <label for="whisper-api-key">API Key (optional)</label>
+          <input type="password" id="whisper-api-key" placeholder="Enter API key if required">
+          <small>Leave empty if your endpoint doesn't require authentication</small>
+        </div>
+
+        <div class="form-group">
+          <label for="server-model">Server Model (Active)</label>
+          <select id="server-model">
+            <option value="tiny">Tiny - Fastest, lowest accuracy (~75MB)</option>
+            <option value="base" selected>Base - Fast, good accuracy (~145MB) [Recommended]</option>
+            <option value="small">Small - Medium speed, better accuracy (~466MB)</option>
+            <option value="medium">Medium - Slow, high accuracy (~1.5GB)</option>
+            <option value="large-v2">Large-v2 - Very slow, very high accuracy (~3GB)</option>
+            <option value="large-v3">Large-v3 - Very slow, best accuracy (~3GB)</option>
+          </select>
+          <small>The model currently running on the server. Change requires restart.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="server-device">Processing Device</label>
+          <select id="server-device">
+            <option value="cpu" selected>CPU (Works everywhere)</option>
+            <option value="cuda">GPU - CUDA (Requires NVIDIA GPU + nvidia-docker)</option>
+          </select>
+          <small>GPU is 5-10x faster but requires NVIDIA GPU and nvidia-docker setup.</small>
+        </div>
+
+        <div class="form-group">
+          <label for="compute-type">Compute Type</label>
+          <select id="compute-type">
+            <option value="int8" selected>int8 - CPU optimized, low memory</option>
+            <option value="float16">float16 - GPU optimized, balanced</option>
+            <option value="float32">float32 - Highest precision</option>
+          </select>
+          <small>int8 recommended for CPU, float16 for GPU. Change requires restart.</small>
+        </div>
+
+        <button id="test-connection" class="button button-secondary">Test Connection</button>
+        <button id="restart-server" class="button button-secondary">Restart Server with Settings</button>
+        <span id="connection-status"></span>
+        <span id="server-status"></span>
+      </section>
+
+      <section class="settings-section">
+        <h2>Hotkeys</h2>
+        <div class="form-group">
+          <label for="hotkey-toggle">Toggle Mode</label>
+          <input type="text" id="hotkey-toggle" placeholder="CommandOrControl+Shift+T">
+          <small>Press once to start, press again to stop recording</small>
+        </div>
+
+        <div class="form-group">
+          <label for="hotkey-ptt">Push-to-Talk</label>
+          <input type="text" id="hotkey-ptt" placeholder="CommandOrControl+Shift+Space">
+          <small>Hold keys to record, release to stop and transcribe</small>
+        </div>
+
+        <div class="info-box">
+          <strong>Hotkey Format:</strong> Use "CommandOrControl" for cross-platform Ctrl/Cmd keys.
+          Examples: "CommandOrControl+Shift+T", "Alt+V", "F9"
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h2>Audio Settings</h2>
+        <div class="form-group">
+          <label for="audio-sample-rate">Sample Rate</label>
+          <select id="audio-sample-rate">
+            <option value="16000">16000 Hz (Recommended for Whisper)</option>
+            <option value="22050">22050 Hz</option>
+            <option value="44100">44100 Hz</option>
+          </select>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h2>UI Preferences</h2>
+        <div class="form-group checkbox-group">
+          <label>
+            <input type="checkbox" id="show-overlay">
+            <span>Show recording overlay</span>
+          </label>
+          <small>Display a visual indicator when recording</small>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label>
+            <input type="checkbox" id="show-notifications">
+            <span>Show notifications</span>
+          </label>
+          <small>Get notified when transcription completes or errors occur</small>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label>
+            <input type="checkbox" id="start-minimized">
+            <span>Start minimized to tray</span>
+          </label>
+          <small>Launch the app in the background on startup</small>
+        </div>
+      </section>
+
+      <section class="settings-section">
+        <h2>Advanced</h2>
+        <div class="form-group checkbox-group">
+          <label>
+            <input type="checkbox" id="auto-insert-text">
+            <span>Automatically insert transcribed text</span>
+          </label>
+          <small>Disable if you only want to copy text manually</small>
+        </div>
+
+        <div class="form-group">
+          <label for="insert-delay">Insert Delay (ms)</label>
+          <input type="number" id="insert-delay" min="0" max="2000" step="50" value="100">
+          <small>Delay before typing text (gives time for focus to switch)</small>
+        </div>
+
+        <div class="form-group">
+          <label for="language">Language (optional)</label>
+          <input type="text" id="language" placeholder="en">
+          <small>Hint for Whisper (e.g., "en", "de", "fr"). Leave empty for auto-detect</small>
+        </div>
+      </section>
+
+      <div class="status-section" id="status-section">
+        <h3>Current Status</h3>
+        <p id="current-status">Idle</p>
+        <p id="last-transcription"></p>
+      </div>
+    </main>
+
+    <footer>
+      <button id="save-settings" class="button button-primary">Save Settings</button>
+      <span id="save-status"></span>
+    </footer>
+  </div>
+
+  <script src="index.js"></script>
+</body>
+</html>

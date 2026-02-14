@@ -1,0 +1,70 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+release/
+out/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Electron
+*.app
+*.exe
+*.dmg
+*.deb
+*.rpm
+*.AppImage
+
+# Config (may contain sensitive data)
+# Uncomment if you want to exclude user configs
+# config/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Testing
+coverage/
+.nyc_output/
+
+# Editor backups
+*~
+.#*
+\#*#
+
+# Windows
+ehthumbs.db
+Desktop.ini
+
+# macOS
+.AppleDouble
+.LSOverride
+._*
+
+# Docker volumes (if any)
+.docker/
+
+.claude/
