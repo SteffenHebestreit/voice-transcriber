@@ -1,0 +1,21 @@
+FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+
+WORKDIR /app
+
+# Install Python and dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python packages with CUDA support
+COPY requirements.gpu.txt .
+RUN pip3 install --no-cache-dir -r requirements.gpu.txt
+
+# Copy server code
+COPY whisper-server.py .
+
+# Expose port
+EXPOSE 8000
+
+CMD ["python3", "whisper-server.py", "--host", "0.0.0.0", "--port", "8000", "--model", "base", "--device", "cuda", "--compute-type", "float16"]

@@ -26,82 +26,103 @@ export class ServerManager {
   ): Promise<void> {
     try {
       // Update docker-compose.yml with the new model and device
-      await this.updateDockerCompose(model, device, computeType);
+      this.updateDockerCompose(model, device, computeType);
 
-      // Restart the container
-      await this.restartContainer();
+      // Rebuild and restart the container (rebuild needed when switching CPU/GPU)
+      await this.rebuildAndRestart();
     } catch (error: any) {
       throw new Error(`Failed to restart server: ${error.message}`);
     }
   }
 
   /**
-   * Update the docker-compose.yml file with the new model, device, and compute type
+   * Rewrite docker-compose.yml with proper CPU or GPU configuration
    */
-  private async updateDockerCompose(
+  private updateDockerCompose(
     model: string,
     device: 'cpu' | 'cuda',
     computeType: 'int8' | 'float16' | 'float32'
-  ): Promise<void> {
+  ): void {
     const composeFile = path.join(this.serverPath, 'docker-compose.yml');
 
     if (!fs.existsSync(composeFile)) {
       throw new Error('docker-compose.yml not found');
     }
 
-    let content = fs.readFileSync(composeFile, 'utf8');
+    const isGPU = device === 'cuda';
+    const dockerfile = isGPU ? 'Dockerfile.gpu' : 'Dockerfile';
+    const pythonCmd = isGPU ? 'python3' : 'python';
 
-    // Replace the model in the command line
-    const modelRegex = /(--model\s+)(\S+)/;
-    content = content.replace(modelRegex, `$1${model}`);
+    let content: string;
 
-    // Replace the device in the command line
-    const deviceRegex = /(--device\s+)(\S+)/;
-    content = content.replace(deviceRegex, `$1${device}`);
+    if (isGPU) {
+      content = `version: '3.8'
 
-    // Replace the compute-type in the command line
-    const computeTypeRegex = /(--compute-type\s+)(\S+)/;
-    content = content.replace(computeTypeRegex, `$1${computeType}`);
+services:
+  whisper-server:
+    build:
+      context: .
+      dockerfile: ${dockerfile}
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+      - NVIDIA_VISIBLE_DEVICES=all
+    command: ${pythonCmd} whisper-server.py --host 0.0.0.0 --port 8000 --model ${model} --device ${device} --compute-type ${computeType}
+    volumes:
+      - whisper-models:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
-    // Enable or disable GPU deployment based on device selection
-    if (device === 'cuda') {
-      // Uncomment the deploy section for GPU
-      content = content.replace(/# (deploy:)/g, '$1');
-      content = content.replace(/#   (resources:)/g, '  $1');
-      content = content.replace(/#     (reservations:)/g, '    $1');
-      content = content.replace(/#       (devices:)/g, '      $1');
-      content = content.replace(/#         - (driver: nvidia)/g, '        - $1');
-      content = content.replace(/#           (count: 1)/g, '          $1');
-      content = content.replace(/#           (capabilities: \[gpu\])/g, '          $1');
+volumes:
+  whisper-models:
+`;
     } else {
-      // Comment out the deploy section for CPU
-      content = content.replace(/^(\s*)(deploy:)/gm, '$1# $2');
-      content = content.replace(/^(\s*)(resources:)/gm, '$1# $2');
-      content = content.replace(/^(\s*)(reservations:)/gm, '$1# $2');
-      content = content.replace(/^(\s*)(devices:)/gm, '$1# $2');
-      content = content.replace(/^(\s*)(- driver: nvidia)/gm, '$1# $2');
-      content = content.replace(/^(\s*)(count: 1)/gm, '$1# $2');
-      content = content.replace(/^(\s*)(capabilities: \[gpu\])/gm, '$1# $2');
+      content = `version: '3.8'
+
+services:
+  whisper-server:
+    build:
+      context: .
+      dockerfile: ${dockerfile}
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: ${pythonCmd} whisper-server.py --host 0.0.0.0 --port 8000 --model ${model} --device ${device} --compute-type ${computeType}
+    volumes:
+      - whisper-models:/root/.cache/huggingface
+
+volumes:
+  whisper-models:
+`;
     }
 
     fs.writeFileSync(composeFile, content);
   }
 
   /**
-   * Restart the Docker container
+   * Rebuild and restart the Docker container
    */
-  private async restartContainer(): Promise<void> {
-    const commands = [
-      `cd "${this.serverPath}" && docker-compose down`,
-      `cd "${this.serverPath}" && docker-compose up -d`
-    ];
-
-    for (const cmd of commands) {
-      const { stdout, stderr } = await execAsync(cmd);
-      if (stderr && !stderr.includes('warning')) {
-        console.error('Docker command stderr:', stderr);
-      }
+  private async rebuildAndRestart(): Promise<void> {
+    // Stop existing container
+    try {
+      await execAsync(`cd "${this.serverPath}" && docker-compose down`);
+    } catch {
+      // Container may not be running, that's fine
     }
+
+    // Rebuild with new Dockerfile and start
+    await execAsync(`cd "${this.serverPath}" && docker-compose up -d --build`, {
+      timeout: 300000 // 5 minute timeout for GPU image builds
+    });
   }
 
   /**
@@ -116,6 +137,36 @@ export class ServerManager {
       return modelMatch ? modelMatch[1] : 'base';
     } catch {
       return 'base';
+    }
+  }
+
+  /**
+   * Get the current device from docker-compose.yml
+   */
+  getCurrentDevice(): 'cpu' | 'cuda' {
+    try {
+      const composeFile = path.join(this.serverPath, 'docker-compose.yml');
+      const content = fs.readFileSync(composeFile, 'utf8');
+
+      const deviceMatch = content.match(/--device\s+(\S+)/);
+      return (deviceMatch?.[1] === 'cuda') ? 'cuda' : 'cpu';
+    } catch {
+      return 'cpu';
+    }
+  }
+
+  /**
+   * Get the current compute type from docker-compose.yml
+   */
+  getCurrentComputeType(): string {
+    try {
+      const composeFile = path.join(this.serverPath, 'docker-compose.yml');
+      const content = fs.readFileSync(composeFile, 'utf8');
+
+      const match = content.match(/--compute-type\s+(\S+)/);
+      return match ? match[1] : 'int8';
+    } catch {
+      return 'int8';
     }
   }
 
